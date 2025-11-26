@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>三维太阳系（three.js 本地版）</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: #e2e8f0;
+    }
+    #three-container {
+      position: fixed;
+      inset: 0;
+    }
+    canvas { display: block; }
+    .ui-overlay {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      background: rgba(10, 15, 28, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
+      border-radius: 12px;
+      padding: 16px 18px;
+      width: 280px;
+      max-height: calc(100% - 32px);
+      overflow: auto;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      letter-spacing: 0.4px;
+      color: #f8fafc;
+    }
+    .section-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #a5b4fc;
+      margin: 10px 0 6px;
+    }
+    .planet-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .planet-btn {
+      padding: 8px 10px;
+      background: linear-gradient(135deg, rgba(67, 56, 202, 0.55), rgba(14, 165, 233, 0.45));
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease;
+      box-shadow: 0 5px 18px rgba(0, 0, 0, 0.25);
+    }
+    .planet-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px rgba(59, 130, 246, 0.25);
+    }
+    .planet-btn.active {
+      box-shadow: 0 12px 30px rgba(167, 139, 250, 0.35);
+      border-color: rgba(167, 139, 250, 0.6);
+    }
+    .info-card {
+      margin-top: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 10px 12px;
+      line-height: 1.5;
+    }
+    .info-name {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #fcd34d;
+    }
+    .hud {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      font-size: 12px;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      align-self: flex-end;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    }
+    .legend-color {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      display: inline-block;
+      border: 1px solid rgba(255,255,255,0.6);
+    }
+    .footer {
+      position: fixed;
+      bottom: 12px;
+      right: 16px;
+      color: rgba(226, 232, 240, 0.75);
+      font-size: 12px;
+      letter-spacing: 0.2px;
+      background: rgba(0,0,0,0.45);
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    @media (max-width: 720px) {
+      .ui-overlay {
+        width: calc(100% - 32px);
+      }
+      .planet-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="three-container"></div>
+  <div class="ui-overlay">
+    <div class="title">三维太阳系（three.js 本地版）</div>
+    <div class="section-label">Planetary Targets</div>
+    <div class="planet-list" id="planet-list"></div>
+    <div class="section-label">Current Focus</div>
+    <div class="info-card">
+      <div class="info-name" id="info-name">Sun</div>
+      <div id="info-text">距离太阳：0 AU<br>公转周期：中心恒星</div>
+    </div>
+  </div>
+  <div class="hud">
+    <div class="pill"><span class="legend-color" style="background:#f59e0b"></span>Sun Light</div>
+    <div class="pill"><span class="legend-color" style="background:#38bdf8"></span>轨道线</div>
+    <div class="pill"><span class="legend-color" style="background:#a855f7"></span>小行星带</div>
+  </div>
+  <div class="footer">拖拽旋转 · 滚轮缩放 · 右键/CTRL 拖拽平移</div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
