@@ -69,8 +69,9 @@ class OrbitControls {
   }
 
   onMouseWheel(event) {
-    const delta = event.deltaY < 0 ? 1 - (event.deltaY * 0.001 * this.zoomSpeed) : 1 + (event.deltaY * 0.001 * this.zoomSpeed);
-    this._scale *= delta;
+    // use exponential scale so zoom in (negative deltaY) reduces radius, zoom out increases
+    const zoomFactor = Math.exp(event.deltaY * 0.001 * this.zoomSpeed);
+    this._scale *= zoomFactor;
   }
 
   pan(deltaX, deltaY) {
@@ -112,7 +113,7 @@ class OrbitControls {
       this._sphericalDelta.theta *= (1 - this.dampingFactor);
       this._sphericalDelta.phi *= (1 - this.dampingFactor);
       this._panOffset.multiplyScalar(1 - this.dampingFactor);
-      this._scale += (1 - this.dampingFactor) * (1 - this._scale);
+      this._scale = 1;
     } else {
       this._sphericalDelta.set(0, 0, 0);
       this._panOffset.set(0, 0, 0);
@@ -130,7 +131,7 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x00040c, 0.0008);
+scene.fog = new THREE.FogExp2(0x02040a, 0.0006);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(80, 60, 120);
@@ -145,7 +146,7 @@ const orbitSpeedScale = 1.2;
 const rotationSpeedScale = 1.5;
 
 // ---------- Helpers ----------
-function createNoiseCanvas(size = 512, colors = ['#ffffff'], alpha = 0.35, horizontalBias = false) {
+function createNoiseCanvas(size = 512, colors = ['#ffffff'], alpha = 0.35, horizontalBias = false, contrast = 0.12) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
@@ -157,6 +158,10 @@ function createNoiseCanvas(size = 512, colors = ['#ffffff'], alpha = 0.35, horiz
   const data = imageData.data;
   for (let i = 0; i < data.length; i += 4) {
     const noise = Math.random() * 255;
+    const shade = (noise / 255 - 0.5) * contrast * 255;
+    data[i] = Math.min(255, Math.max(0, data[i] + shade));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + shade));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + shade));
     data[i + 3] = Math.min(255, data[i + 3] * alpha + noise * 0.35);
   }
   ctx.putImageData(imageData, 0, 0);
@@ -183,8 +188,29 @@ function createStarfieldTexture(size = 1024, density = 0.0008) {
   return new THREE.CanvasTexture(c);
 }
 
-function createPlanetMaterial(baseColors, { metallic = 0.02, roughness = 0.6, emissive = 0x000000, bands = false, glow = false } = {}) {
-  const texture = createNoiseCanvas(512, baseColors, 0.55, bands);
+function createStarParticles(count = 1500, radius = 1800) {
+  const geometry = new THREE.BufferGeometry();
+  const positions = [];
+  for (let i = 0; i < count; i++) {
+    const dir = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
+    const dist = radius * (0.6 + Math.random() * 0.4);
+    const pos = dir.multiplyScalar(dist);
+    positions.push(pos.x, pos.y, pos.z);
+  }
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    size: 3,
+    color: 0xcadffd,
+    transparent: true,
+    opacity: 0.7,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  return new THREE.Points(geometry, material);
+}
+
+function createPlanetMaterial(baseColors, { metallic = 0.02, roughness = 0.6, emissive = 0x000000, bands = false, glow = false, bumpScale = 0.15 } = {}) {
+  const texture = createNoiseCanvas(1024, baseColors, 0.55, bands, 0.16);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   if (bands) texture.repeat.set(2, 1);
   const material = new THREE.MeshStandardMaterial({
@@ -192,7 +218,9 @@ function createPlanetMaterial(baseColors, { metallic = 0.02, roughness = 0.6, em
     roughness,
     metalness: metallic,
     emissive: new THREE.Color(emissive),
-    emissiveIntensity: glow ? 1.6 : 0.3,
+    emissiveIntensity: glow ? 1.6 : 0.28,
+    bumpMap: texture,
+    bumpScale,
   });
   return material;
 }
@@ -229,10 +257,10 @@ function createHaloTexture(size = 512) {
 }
 
 // ---------- Lights ----------
-const ambient = new THREE.AmbientLight(0x0d1726, 0.45);
+const ambient = new THREE.AmbientLight(0x0d1726, 0.65);
 scene.add(ambient);
 
-const sunLight = new THREE.PointLight(0xffddaa, 2.2, 0, 2);
+const sunLight = new THREE.PointLight(0xffddaa, 3.2, 0, 2.5);
 sunLight.position.set(0, 0, 0);
 scene.add(sunLight);
 
@@ -262,23 +290,25 @@ sunMesh.add(haloSprite);
 const starsGeo = new THREE.SphereGeometry(2000, 32, 32);
 const starsMat = new THREE.MeshBasicMaterial({
   side: THREE.BackSide,
-  map: createStarfieldTexture(1024, 0.0012),
+  map: createStarfieldTexture(2048, 0.0016),
   transparent: true,
-  opacity: 0.95,
+  opacity: 0.96,
 });
 const starfield = new THREE.Mesh(starsGeo, starsMat);
 scene.add(starfield);
+const starParticles = createStarParticles(2200, 1700);
+scene.add(starParticles);
 
 // ---------- Planet Definitions ----------
 const planetDefinitions = [
-  { name: 'Mercury', radius: 1.2, distance: 14, speed: 1.6, rotation: 1.0, tilt: 3, colors: ['#d8d8d8', '#9a9a9a', '#c5c5c5'] },
-  { name: 'Venus', radius: 2.2, distance: 19, speed: 1.2, rotation: 1.1, tilt: 1, colors: ['#f2c57c', '#e0a96d', '#d79555'] },
-  { name: 'Earth', radius: 2.4, distance: 24, speed: 1.0, rotation: 3.0, tilt: 2, colors: ['#3b82f6', '#0ea5e9', '#22c55e', '#f1f5f9'] },
-  { name: 'Mars', radius: 1.9, distance: 30, speed: 0.82, rotation: 2.2, tilt: 2, colors: ['#f97316', '#c2410c', '#f59e0b'] },
-  { name: 'Jupiter', radius: 6.5, distance: 42, speed: 0.55, rotation: 4.0, tilt: 1.3, colors: ['#f5e0b8', '#d9b48f', '#b57a63', '#e9c7a1'], bands: true },
-  { name: 'Saturn', radius: 5.6, distance: 55, speed: 0.45, rotation: 3.2, tilt: 2.8, colors: ['#f5d7a1', '#d6b37e', '#b08c6c'], bands: true },
-  { name: 'Uranus', radius: 4.1, distance: 69, speed: 0.32, rotation: 2.4, tilt: 0.8, colors: ['#7cd3f7', '#5fb4e5', '#9decf9'], bands: true },
-  { name: 'Neptune', radius: 4.0, distance: 82, speed: 0.26, rotation: 2.0, tilt: 1.6, colors: ['#4f9efc', '#2563eb', '#1e3a8a'], bands: false },
+  { name: 'Mercury', radius: 1.2, distance: 14, speed: 1.6, rotation: 1.0, tilt: 3, colors: ['#d8d8d8', '#9a9a9a', '#c5c5c5'], bumpScale: 0.08 },
+  { name: 'Venus', radius: 2.2, distance: 19, speed: 1.2, rotation: 1.1, tilt: 1, colors: ['#f2c57c', '#e0a96d', '#d79555'], bumpScale: 0.12 },
+  { name: 'Earth', radius: 2.4, distance: 24, speed: 1.0, rotation: 3.0, tilt: 2, colors: ['#3b82f6', '#0ea5e9', '#22c55e', '#f1f5f9'], bumpScale: 0.16 },
+  { name: 'Mars', radius: 1.9, distance: 30, speed: 0.82, rotation: 2.2, tilt: 2, colors: ['#f97316', '#c2410c', '#f59e0b'], bumpScale: 0.14 },
+  { name: 'Jupiter', radius: 6.5, distance: 42, speed: 0.55, rotation: 4.0, tilt: 1.3, colors: ['#f5e0b8', '#d9b48f', '#b57a63', '#e9c7a1'], bands: true, bumpScale: 0.12 },
+  { name: 'Saturn', radius: 5.6, distance: 55, speed: 0.45, rotation: 3.2, tilt: 2.8, colors: ['#f5d7a1', '#d6b37e', '#b08c6c'], bands: true, bumpScale: 0.12 },
+  { name: 'Uranus', radius: 4.1, distance: 69, speed: 0.32, rotation: 2.4, tilt: 0.8, colors: ['#7cd3f7', '#5fb4e5', '#9decf9'], bands: true, bumpScale: 0.1 },
+  { name: 'Neptune', radius: 4.0, distance: 82, speed: 0.26, rotation: 2.0, tilt: 1.6, colors: ['#4f9efc', '#2563eb', '#1e3a8a'], bands: false, bumpScale: 0.1 },
 ];
 
 const planetSystems = [];
@@ -288,7 +318,7 @@ function createPlanetSystem(def) {
   orbitGroup.rotation.x = THREE.MathUtils.degToRad(def.tilt || 0);
 
   const geometry = new THREE.SphereGeometry(def.radius, 48, 48);
-  const material = createPlanetMaterial(def.colors, { bands: def.bands || false });
+  const material = createPlanetMaterial(def.colors, { bands: def.bands || false, bumpScale: def.bumpScale || 0.1 });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.x = def.distance;
   mesh.castShadow = true;
@@ -371,6 +401,30 @@ function createAsteroidBelt(inner = 32, outer = 45, count = 1200) {
 
 const asteroidBelt = createAsteroidBelt();
 
+// ---------- Comets ----------
+const comets = [];
+function createComet({ name, color, perihelion = 18, aphelion = 90, speed = 0.3, tilt = 20 }) {
+  const bodyGeo = new THREE.SphereGeometry(0.8, 16, 16);
+  const bodyMat = new THREE.MeshStandardMaterial({ color, emissive: new THREE.Color(color).multiplyScalar(0.6), roughness: 0.5, metalness: 0.1 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+
+  const tailTexture = createNoiseCanvas(256, ['rgba(255,255,255,0.9)', color], 0.6, true, 0.05);
+  const tailMat = new THREE.SpriteMaterial({ map: tailTexture, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.9 });
+  const tail = new THREE.Sprite(tailMat);
+  tail.scale.set(10, 4, 1);
+  body.add(tail);
+
+  const group = new THREE.Group();
+  group.rotation.x = THREE.MathUtils.degToRad(tilt);
+  group.add(body);
+  scene.add(group);
+  comets.push({ name, body, group, speed, angle: Math.random() * Math.PI * 2, perihelion, aphelion });
+}
+
+createComet({ name: 'Halley', color: '#8ef6ff', perihelion: 16, aphelion: 95, speed: 0.22, tilt: 25 });
+createComet({ name: 'Swift-Tuttle', color: '#c4ddff', perihelion: 20, aphelion: 110, speed: 0.18, tilt: 35 });
+createComet({ name: 'Encke', color: '#f8c7ff', perihelion: 12, aphelion: 60, speed: 0.35, tilt: 12 });
+
 // ---------- UI Binding ----------
 const planetListEl = document.getElementById('planet-list');
 const infoNameEl = document.getElementById('info-name');
@@ -447,6 +501,17 @@ function animate() {
     const x = Math.cos(moon.angle) * moon.mesh.position.length();
     const z = Math.sin(moon.angle) * moon.mesh.position.length();
     moon.mesh.position.set(x, 0, z);
+  });
+
+  // comets with elliptical orbits and animated tails
+  comets.forEach((comet) => {
+    comet.angle += dt * comet.speed * orbitSpeedScale * 0.35;
+    const radius = THREE.MathUtils.mapLinear(Math.cos(comet.angle), -1, 1, comet.perihelion, comet.aphelion);
+    const x = Math.cos(comet.angle) * radius;
+    const z = Math.sin(comet.angle) * radius * 0.6;
+    comet.body.position.set(x, 0, z);
+    comet.body.lookAt(new THREE.Vector3(0, 0, 0));
+    comet.body.children.forEach((child) => child instanceof THREE.Sprite && (child.material.opacity = 0.5 + 0.5 * Math.sin(comet.angle + 1)));
   });
 
   // asteroid belt slow rotation
